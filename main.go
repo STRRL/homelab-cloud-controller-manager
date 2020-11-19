@@ -18,6 +18,8 @@ package main
 
 import (
 	"flag"
+	"github.com/strrl/homelab-cloud-controller-manager/controller"
+	corev1 "k8s.io/api/core/v1"
 	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -59,6 +61,16 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	lbLogger := ctrl.Log.WithName("lb-reconciler")
+
+	loadBalancerReconciler := controller.NewServiceLoadBalancerReconciler(mgr.GetClient(), lbLogger)
+	err = ctrl.NewControllerManagedBy(mgr).For(&corev1.Service{}).Complete(loadBalancerReconciler)
+
+	if err != nil {
+		setupLog.Error(err, "failed to init load balancer reconciler")
 		os.Exit(1)
 	}
 
