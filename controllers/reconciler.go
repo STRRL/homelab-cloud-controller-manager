@@ -1,4 +1,4 @@
-package controller
+package controllers
 
 import (
 	"context"
@@ -36,6 +36,11 @@ func (it *ServiceLoadBalancerReconciler) Reconcile(request reconcile.Request) (r
 	if err != nil {
 		it.logger.Error(err, "failed to fetch target service")
 		// err is nil, will not requeue
+		return reconcile.Result{}, nil
+	}
+
+	if service.Spec.Type != corev1.ServiceTypeLoadBalancer {
+		it.logger.WithValues("service", request.NamespacedName, "service type", service.Spec.Type).Info("service type is not LoadBalancer, skipping")
 		return reconcile.Result{}, nil
 	}
 

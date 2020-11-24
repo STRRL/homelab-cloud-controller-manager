@@ -18,7 +18,7 @@ package main
 
 import (
 	"flag"
-	"github.com/strrl/homelab-cloud-controller-manager/controller"
+	"github.com/strrl/homelab-cloud-controller-manager/controllers"
 	corev1 "k8s.io/api/core/v1"
 	"os"
 
@@ -66,7 +66,7 @@ func main() {
 
 	lbLogger := ctrl.Log.WithName("lb-reconciler")
 
-	loadBalancerReconciler := controller.NewServiceLoadBalancerReconciler(mgr.GetClient(), lbLogger)
+	loadBalancerReconciler := controllers.NewServiceLoadBalancerReconciler(mgr.GetClient(), lbLogger)
 	err = ctrl.NewControllerManagedBy(mgr).For(&corev1.Service{}).Complete(loadBalancerReconciler)
 
 	if err != nil {

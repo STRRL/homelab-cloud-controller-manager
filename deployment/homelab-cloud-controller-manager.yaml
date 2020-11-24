@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hccm
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: homelab-cloud-controller-manager
+rules:
+  - verbs:
+      - get
+      - list
+      - watch
+      - update
+    apiGroups:
+      - ""
+    resources:
+      - services
+      - services/status
+---
+# permissions to do leader election.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: leader-election-role
+  namespace: hccm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps/status
+    verbs:
+      - get
+      - update
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: homelab-cloud-controller-manager
+  namespace: hccm
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: homelab-cloud-controller-manager
+roleRef:
+  name: homelab-cloud-controller-manager
+  kind: ClusterRole
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+  - kind: ServiceAccount
+    name: homelab-cloud-controller-manager
+    namespace: hccm
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: leader-election-rolebinding
+  namespace: hccm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: leader-election-role
+subjects:
+  - kind: ServiceAccount
+    name: homelab-cloud-controller-manager
+    namespace: hccm
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homelab-cloud-controller-manager
+  namespace: hccm
+spec:
+  selector:
+    matchLabels:
+      control-plane: homelab-cloud-controller-manager
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        control-plane: homelab-cloud-controller-manager
+    spec:
+      serviceAccountName: homelab-cloud-controller-manager
+      containers:
+        - command:
+            - /manager
+          args:
+            - --enable-leader-election
+          image: strrl/homelab-cloud-controller-manager:latest
+          imagePullPolicy: Always
+          name: homelab-cloud-controller-manager
+          resources:
+            limits:
+              cpu: 100m
+              memory: 30Mi
+            requests:
+              cpu: 100m
+              memory: 20Mi
+      terminationGracePeriodSeconds: 10
