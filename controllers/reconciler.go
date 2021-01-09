@@ -49,56 +49,64 @@ func (it *ServiceLoadBalancerReconciler) Reconcile(request reconcile.Request) (r
 		return reconcile.Result{}, nil
 	}
 
-	if value, ok := service.GetAnnotations()[SubNetAnnotation]; ok {
-		_, ipNet, err := net.ParseCIDR(value)
-		if err != nil {
-			it.logger.WithValues(SubNetAnnotation, value).Error(err, "failed to parse CIDR from %s", SubNetAnnotation)
-			// err is nil, will not requeue
-			return reconcile.Result{}, nil
-		}
-
-		maskSize, _ := it.clusterIPMask.Size()
-		_, hostBits, err := iputil.SplitWithMask(clusterIp, uint(maskSize))
-		if err != nil {
-			it.logger.Error(err, "split ClusterIP failed")
-			// err is nil, will not requeue
-			return reconcile.Result{}, nil
-		}
-		newNetBit, err := iputil.Ip2long(ipNet.IP.String())
-		if err != nil {
-			it.logger.Error(err, "parse new netBit failed")
-			// err is nil, will not requeue
-			return reconcile.Result{}, nil
-		}
-
-		externalIp := iputil.Long2ip(hostBits | newNetBit)
-		updated := service.DeepCopy()
-
-		alreadyContains := false
-		for _, item := range updated.Status.LoadBalancer.Ingress {
-			if item.IP == externalIp {
-				it.logger.Info("ingress ip already exist", "service", request.NamespacedName, "ip", externalIp)
-				alreadyContains = true
-			}
-		}
-
-		if !alreadyContains {
-			it.logger.Info("update ingress", "service", request.NamespacedName, "ingress-ip", externalIp)
-			// it will replace all your ingress IP
-			updated.Status.LoadBalancer.Ingress = append([]corev1.LoadBalancerIngress(nil), corev1.LoadBalancerIngress{
-				IP: externalIp,
-			})
-
-			err := it.kubeClient.Status().Update(context.Background(), updated)
-			if err != nil {
-				it.logger.Error(err, "failed to update service")
-				return reconcile.Result{}, err
-			}
-		}
-
-	} else {
+	if _, ok := service.GetAnnotations()[SubNetAnnotation]; !ok {
 		it.logger.Info(fmt.Sprintf("service do not contains annotation %s, skipping", SubNetAnnotation), "key", request.NamespacedName)
+		return reconcile.Result{}, nil
+	}
+
+	externalIpNet := service.GetAnnotations()[SubNetAnnotation]
+	externalIp, err := it.generateExternalIp(clusterIp, externalIpNet)
+
+	if err != nil {
+		// wrong with configurations, will not requeue
+		return reconcile.Result{}, nil
+	}
+
+	alreadyContains := false
+	updated := service.DeepCopy()
+	for _, item := range updated.Status.LoadBalancer.Ingress {
+		if item.IP == externalIp {
+			it.logger.Info("ingress ip already exist", "service", request.NamespacedName, "ip", externalIp)
+			alreadyContains = true
+		}
+	}
+
+	if !alreadyContains {
+		it.logger.Info("update ingress", "service", request.NamespacedName, "ingress-ip", externalIp)
+		// it will replace all your ingress IP
+		updated.Status.LoadBalancer.Ingress = append([]corev1.LoadBalancerIngress(nil), corev1.LoadBalancerIngress{
+			IP: externalIp,
+		})
+
+		err := it.kubeClient.Status().Update(context.Background(), updated)
+		if err != nil {
+			it.logger.Error(err, "failed to update service")
+			return reconcile.Result{}, err
+		}
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (it *ServiceLoadBalancerReconciler) generateExternalIp(clusterIp, externalIpNet string) (externalIp string, err error) {
+	_, ipNet, err := net.ParseCIDR(externalIpNet)
+	if err != nil {
+		it.logger.WithValues(SubNetAnnotation, externalIpNet).Error(err, "failed to parse CIDR from %s", SubNetAnnotation)
+		// err is nil, will not requeue
+		return "", nil
+	}
+	maskSize, _ := it.clusterIPMask.Size()
+	_, hostBits, err := iputil.SplitWithMask(clusterIp, uint(maskSize))
+	if err != nil {
+		it.logger.Error(err, "split ClusterIP failed")
+
+		return "", err
+	}
+	newNetBit, err := iputil.Ip2long(ipNet.IP.String())
+	if err != nil {
+		it.logger.Error(err, "parse new netBit failed")
+		// err is nil, will not requeue
+		return "", err
+	}
+	return iputil.Long2ip(hostBits | newNetBit), nil
 }
