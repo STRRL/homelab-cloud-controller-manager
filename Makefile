@@ -1,6 +1,10 @@
 
+# REPO is the 
+REPO ?= ghcr.io/strrl
+
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMAGE ?= ${REPO}/hccm:latest
+
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
@@ -35,7 +39,7 @@ uninstall: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	cd config/manager && kustomize edit set image controller=${IMG}
+	cd config/manager && kustomize edit set image controller=${IMAGE}
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
@@ -56,11 +60,11 @@ generate: controller-gen
 
 # Build the docker image
 docker-build: test
-	docker build . -t ${IMG}
+	docker build . -t ${IMAGE}
 
 # Push the docker image
 docker-push:
-	docker push ${IMG}
+	docker push ${IMAGE}
 
 # find or download controller-gen
 # download controller-gen if necessary
